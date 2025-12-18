@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Reports{% endblock %}
+{% block page_title %}Reports & Analytics{% endblock %}
+
+{% block content %}
+<div class="reports-page">
+    <div class="report-cards">
+        <div class="report-card" onclick="showReport('inventory')">
+            <i data-lucide="package"></i>
+            <h3>Inventory Summary</h3>
+            <p>Current stock levels and valuation</p>
+        </div>
+        <div class="report-card" onclick="showReport('lowstock')">
+            <i data-lucide="alert-triangle"></i>
+            <h3>Low Stock Report</h3>
+            <p>Items below reorder point</p>
+        </div>
+        <div class="report-card" onclick="showReport('movements')">
+            <i data-lucide="activity"></i>
+            <h3>Stock Movements</h3>
+            <p>Transaction history</p>
+        </div>
+        <div class="report-card" onclick="showReport('valuation')">
+            <i data-lucide="dollar-sign"></i>
+            <h3>Stock Valuation</h3>
+            <p>Value by category</p>
+        </div>
+    </div>
+
+    <div class="section" id="reportSection" style="display:none;">
+        <div class="section-header">
+            <h2 class="section-title" id="reportTitle">Report</h2>
+            <div class="report-actions">
+                <button class="btn btn-secondary" onclick="exportCSV()"><i data-lucide="download"></i> Export
+                    CSV</button>
+            </div>
+        </div>
+        <div class="card" id="reportContent"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    async function showReport(type) {
+        document.getElementById('reportSection').style.display = 'block';
+        const content = document.getElementById('reportContent');
+        content.innerHTML = '<div class="loading-spinner"><i data-lucide="loader-2" class="spin"></i></div>';
+        lucide.createIcons();
+
+        if (type === 'inventory') {
+            document.getElementById('reportTitle').textContent = 'Inventory Summary';
+            const res = await fetch('/reports/api/inventory-summary');
+            const data = await res.json();
+            content.innerHTML = `<div class="report-summary"><div class="summary-item"><span class="label">Total Products</span><span class="value">${data.total_products}</span></div><div class="summary-item"><span class="label">Total Quantity</span><span class="value">${data.total_quantity.toLocaleString()}</span></div><div class="summary-item"><span class="label">Total Value</span><span class="value">$${data.total_value.toLocaleString()}</span></div><div class="summary-item warning"><span class="label">Low Stock</span><span class="value">${data.low_stock_count}</span></div><div class="summary-item danger"><span class="label">Out of Stock</span><span class="value">${data.out_of_stock_count}</span></div></div><table class="data-table"><thead><tr><th>SKU</th><th>Name</th><th>Category</th><th>Qty</th><th>Value</th><th>Status</th></tr></thead><tbody>${data.products.map(p => `<tr><td><code>${p.sku}</code></td><td>${p.name}</td><td>${p.category_name || '-'}</td><td>${p.quantity}</td><td>$${p.stock_value.toFixed(2)}</td><td><span class="status-badge ${p.stock_status}">${p.stock_status}</span></td></tr>`).join('')}</tbody></table>`;
+        } else if (type === 'lowstock') {
+            document.getElementById('reportTitle').textContent = 'Low Stock Report';
+            const res = await fetch('/reports/api/low-stock-report');
+            const data = await res.json();
+            content.innerHTML = data.count ? `<table class="data-table"><thead><tr><th>SKU</th><th>Name</th><th>Current</th><th>Min Stock</th><th>Shortage</th><th>Reorder Qty</th></tr></thead><tbody>${data.products.map(p => `<tr><td><code>${p.sku}</code></td><td>${p.name}</td><td class="${p.quantity === 0 ? 'text-danger' : 'text-warning'}">${p.quantity}</td><td>${p.min_stock}</td><td class="text-danger">${p.shortage}</td><td>${p.reorder_quantity}</td></tr>`).join('')}</tbody></table>` : '<div class="empty-state"><i data-lucide="check-circle"></i><p>No low stock items!</p></div>';
+        } else if (type === 'movements') {
+            document.getElementById('reportTitle').textContent = 'Stock Movements (Last 30 Days)';
+            const res = await fetch('/reports/api/movement-history?days=30');
+            const data = await res.json();
+            content.innerHTML = data.transactions.length ? `<table class="data-table"><thead><tr><th>Date</th><th>Product</th><th>Type</th><th>Qty</th><th>Before</th><th>After</th><th>Reason</th></tr></thead><tbody>${data.transactions.map(t => `<tr><td>${new Date(t.created_at).toLocaleDateString()}</td><td>${t.product_name}</td><td><span class="type-badge ${t.transaction_type.toLowerCase()}">${t.transaction_type}</span></td><td>${t.quantity}</td><td>${t.quantity_before}</td><td>${t.quantity_after}</td><td>${t.reason || '-'}</td></tr>`).join('')}</tbody></table>` : '<div class="empty-state"><p>No transactions</p></div>';
+        } else if (type === 'valuation') {
+            document.getElementById('reportTitle').textContent = 'Stock Valuation by Category';
+            const res = await fetch('/reports/api/stock-valuation');
+            const data = await res.json();
+            const total = data.reduce((s, c) => s + c.total_value, 0);
+            content.innerHTML = `<div class="valuation-chart">${data.map(c => `<div class="valuation-bar"><div class="bar-label">${c.name}</div><div class="bar-container"><div class="bar-fill" style="width: ${(c.total_value / total * 100).toFixed(1)}%; background: ${c.color}"></div></div><div class="bar-value">$${c.total_value.toLocaleString()}</div></div>`).join('')}</div><div class="total-valuation">Total: $${total.toLocaleString()}</div>`;
+        }
+        lucide.createIcons();
+    }
+
+    async function exportCSV() {
+        window.location.href = '/reports/api/export/inventory';
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}Locations{% endblock %}
+{% block page_title %}Warehouse Locations{% endblock %}
+
+{% block content %}
+<div class="locations-page">
+    <div class="toolbar">
+        <div class="toolbar-left">
+            <select id="zoneFilter" class="select-input">
+                <option value="">All Zones</option>
+            </select>
+            <select id="zoneTypeFilter" class="select-input">
+                <option value="">All Types</option>
+                <option value="receiving">Receiving</option>
+                <option value="storage">Storage</option>
+                <option value="shipping">Shipping</option>
+            </select>
+        </div>
+        <div class="toolbar-right">
+            <button class="btn btn-primary" id="addLocationBtn"><i data-lucide="plus"></i><span>Add
+                    Location</span></button>
+        </div>
+    </div>
+
+    <div class="zone-grid" id="zoneGrid"></div>
+
+    <div class="section">
+        <h2 class="section-title">All Locations</h2>
+        <div class="card">
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Code</th>
+                            <th>Zone</th>
+                            <th>Type</th>
+                            <th>Products</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="locationsTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<template id="locationFormTemplate">
+    <form id="locationForm" class="modal-form">
+        <input type="hidden" id="locationId">
+        <div class="form-row">
+            <div class="form-group"><label>Zone *</label><input type="text" id="locationZone" required></div>
+            <div class="form-group"><label>Type</label><select id="locationZoneType">
+                    <option value="storage">Storage</option>
+                    <option value="receiving">Receiving</option>
+                    <option value="shipping">Shipping</option>
+                </select></div>
+        </div>
+        <div class="form-row">
+            <div class="form-group"><label>Aisle *</label><input type="text" id="locationAisle" required></div>
+            <div class="form-group"><label>Rack *</label><input type="text" id="locationRack" required></div>
+            <div class="form-group"><label>Shelf *</label><input type="text" id="locationShelf" required></div>
+        </div>
+        <div class="form-actions">
+            <button type="button" class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save</button>
+        </div>
+    </form>
+</template>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let locations = [];
+    document.addEventListener('DOMContentLoaded', () => { loadLocations(); document.getElementById('addLocationBtn').onclick = () => showLocationModal(); document.getElementById('zoneFilter').onchange = loadLocations; document.getElementById('zoneTypeFilter').onchange = loadLocations; });
+
+    async function loadLocations() {
+        const zone = document.getElementById('zoneFilter').value;
+        const type = document.getElementById('zoneTypeFilter').value;
+        let url = '/locations/api/locations?';
+        if (zone) url += `zone=${zone}&`;
+        if (type) url += `zone_type=${type}&`;
+        const res = await fetch(url);
+        locations = await res.json();
+        renderZoneGrid();
+        renderLocations();
+    }
+
+    function renderZoneGrid() {
+        const zoneData = {};
+        locations.forEach(l => { if (!zoneData[l.zone]) zoneData[l.zone] = { zone: l.zone, type: l.zone_type, count: 0 }; zoneData[l.zone].count++; });
+        document.getElementById('zoneGrid').innerHTML = Object.values(zoneData).map(z => `<div class="zone-card"><div class="zone-header"><span class="zone-name">Zone ${z.zone}</span><span class="zone-type">${z.type}</span></div><div class="zone-stats"><span>${z.count} locations</span></div></div>`).join('');
+        lucide.createIcons();
+    }
+
+    function renderLocations() {
+        document.getElementById('locationsTableBody').innerHTML = locations.map(l => `<tr><td><code>${l.full_code}</code></td><td>${l.zone}</td><td>${l.zone_type}</td><td>${l.product_count}</td><td><span class="status-badge ${l.is_active ? 'active' : ''}">${l.is_active ? 'Active' : 'Inactive'}</span></td><td><div class="action-buttons"><button class="btn-icon" onclick="showLocationModal(${l.id})"><i data-lucide="edit"></i></button><button class="btn-icon danger" onclick="deleteLocation(${l.id})"><i data-lucide="trash-2"></i></button></div></td></tr>`).join('');
+        lucide.createIcons();
+    }
+
+    function showLocationModal(id = null) {
+        const content = document.getElementById('locationFormTemplate').content.cloneNode(true);
+        openModal(id ? 'Edit Location' : 'Add Location', content);
+        if (id) { const l = locations.find(x => x.id === id); document.getElementById('locationId').value = l.id; document.getElementById('locationZone').value = l.zone; document.getElementById('locationZoneType').value = l.zone_type; document.getElementById('locationAisle').value = l.aisle; document.getElementById('locationRack').value = l.rack; document.getElementById('locationShelf').value = l.shelf; }
+        document.getElementById('locationForm').onsubmit = saveLocation;
+        lucide.createIcons();
+    }
+
+    async function saveLocation(e) {
+        e.preventDefault();
+        const id = document.getElementById('locationId').value;
+        const data = { zone: document.getElementById('locationZone').value.toUpperCase(), zone_type: document.getElementById('locationZoneType').value, aisle: document.getElementById('locationAisle').value, rack: document.getElementById('locationRack').value, shelf: document.getElementById('locationShelf').value.toUpperCase(), bin: '01', max_capacity: 100, is_active: true };
+        await fetch(id ? `/locations/api/locations/${id}` : '/locations/api/locations', { method: id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+        closeModal(); loadLocations(); showToast('Location saved', 'success');
+    }
+
+    async function deleteLocation(id) { if (!confirm('Delete?')) return; await fetch(`/locations/api/locations/${id}`, { method: 'DELETE' }); loadLocations(); showToast('Deleted', 'success'); }
+</script>
+{% endblock %}

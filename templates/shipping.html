@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Shipping{% endblock %}
+{% block page_title %}Shipping{% endblock %}
+
+{% block content %}
+<div class="shipping-page">
+    <div class="toolbar">
+        <div class="toolbar-left">
+            <select id="statusFilter" class="select-input">
+                <option value="">All Status</option>
+                <option value="draft">Draft</option>
+                <option value="picking">Picking</option>
+                <option value="packed">Packed</option>
+                <option value="shipped">Shipped</option>
+            </select>
+        </div>
+        <div class="toolbar-right">
+            <button class="btn btn-primary" id="newOrderBtn"><i data-lucide="plus"></i><span>New
+                    Shipment</span></button>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>SO Number</th>
+                        <th>Customer</th>
+                        <th>Items</th>
+                        <th>Ship Date</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="ordersTableBody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<template id="orderFormTemplate">
+    <form id="orderForm" class="modal-form">
+        <input type="hidden" id="orderId">
+        <div class="form-group"><label>Customer</label><input type="text" id="orderCustomer"></div>
+        <div class="form-group"><label>Ship Date</label><input type="date" id="orderShipDate"></div>
+        <div class="form-group"><label>Address</label><textarea id="orderAddress" rows="2"></textarea></div>
+        <h4>Order Items</h4>
+        <div id="orderItems" class="order-items-list"></div>
+        <button type="button" class="btn btn-ghost" onclick="addOrderItem()"><i data-lucide="plus"></i> Add
+            Item</button>
+        <div class="form-actions">
+            <button type="button" class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save Order</button>
+        </div>
+    </form>
+</template>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let orders = [], products = [];
+    document.addEventListener('DOMContentLoaded', () => { loadOrders(); loadProducts(); document.getElementById('newOrderBtn').onclick = () => showOrderModal(); document.getElementById('statusFilter').onchange = loadOrders; });
+
+    async function loadProducts() { const res = await fetch('/inventory/api/products'); products = await res.json(); }
+    async function loadOrders() { const status = document.getElementById('statusFilter').value; const res = await fetch(`/shipping/api/orders${status ? '?status=' + status : ''}`); orders = await res.json(); renderOrders(); }
+
+    function renderOrders() {
+        document.getElementById('ordersTableBody').innerHTML = orders.length ? orders.map(o => `<tr><td><code>${o.so_number}</code></td><td>${o.customer || '-'}</td><td>${o.total_picked}/${o.total_items}</td><td>${o.ship_date || '-'}</td><td><span class="status-badge ${o.status}">${o.status}</span></td><td><div class="action-buttons">${o.status === 'draft' ? `<button class="btn-icon" onclick="pickOrder(${o.id})" title="Start Pick"><i data-lucide="clipboard-list"></i></button>` : ''}${o.status === 'picking' ? `<button class="btn-icon" onclick="confirmPick(${o.id})" title="Confirm Pick"><i data-lucide="check"></i></button>` : ''}${o.status === 'packed' ? `<button class="btn-icon" onclick="shipOrder(${o.id})" title="Ship"><i data-lucide="truck"></i></button>` : ''}<button class="btn-icon" onclick="showOrderModal(${o.id})"><i data-lucide="edit"></i></button>${!['shipped', 'delivered'].includes(o.status) ? `<button class="btn-icon danger" onclick="cancelOrder(${o.id})"><i data-lucide="x"></i></button>` : ''}</div></td></tr>`).join('') : '<tr><td colspan="6" class="empty-cell">No orders</td></tr>';
+        lucide.createIcons();
+    }
+
+    function showOrderModal(id = null) {
+        const content = document.getElementById('orderFormTemplate').content.cloneNode(true);
+        openModal(id ? 'Edit Shipment' : 'New Shipment', content);
+        if (id) { const o = orders.find(x => x.id === id); document.getElementById('orderId').value = o.id; document.getElementById('orderCustomer').value = o.customer || ''; document.getElementById('orderShipDate').value = o.ship_date || ''; document.getElementById('orderAddress').value = o.shipping_address || ''; o.items.forEach(i => addOrderItem(i)); } else { addOrderItem(); }
+        document.getElementById('orderForm').onsubmit = saveOrder;
+        lucide.createIcons();
+    }
+
+    function addOrderItem(item = null) {
+        const container = document.getElementById('orderItems');
+        const div = document.createElement('div');
+        div.className = 'order-item-row';
+        div.innerHTML = `<select class="item-product">${products.map(p => `<option value="${p.id}" ${item && item.product_id === p.id ? 'selected' : ''}>${p.sku} - ${p.name} (${p.quantity} avail)</option>`).join('')}</select><input type="number" class="item-qty" value="${item ? item.quantity : 1}" min="1"><button type="button" class="btn-icon danger" onclick="this.parentElement.remove()"><i data-lucide="trash-2"></i></button>`;
+        container.appendChild(div);
+        lucide.createIcons();
+    }
+
+    async function saveOrder(e) {
+        e.preventDefault();
+        const id = document.getElementById('orderId').value;
+        const items = [...document.querySelectorAll('.order-item-row')].map(row => ({ product_id: parseInt(row.querySelector('.item-product').value), quantity: parseInt(row.querySelector('.item-qty').value), unit_price: products.find(p => p.id == row.querySelector('.item-product').value)?.unit_price || 0 }));
+        const data = { customer: document.getElementById('orderCustomer').value, ship_date: document.getElementById('orderShipDate').value || null, shipping_address: document.getElementById('orderAddress').value, items };
+        await fetch(id ? `/shipping/api/orders/${id}` : '/shipping/api/orders', { method: id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+        closeModal(); loadOrders(); showToast('Order saved', 'success');
+    }
+
+    async function pickOrder(id) { await fetch(`/shipping/api/orders/${id}/pick`, { method: 'POST' }); loadOrders(); showToast('Picking started', 'success'); }
+    async function confirmPick(id) { const o = orders.find(x => x.id === id); const items = o.items.map(i => ({ item_id: i.id, quantity: i.quantity - i.picked_quantity })); await fetch(`/shipping/api/orders/${id}/confirm-pick`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items }) }); loadOrders(); showToast('Pick confirmed', 'success'); }
+    async function shipOrder(id) { await fetch(`/shipping/api/orders/${id}/ship`, { method: 'POST' }); loadOrders(); showToast('Order shipped', 'success'); }
+    async function cancelOrder(id) { if (!confirm('Cancel order?')) return; await fetch(`/shipping/api/orders/${id}/cancel`, { method: 'POST' }); loadOrders(); showToast('Order cancelled', 'success'); }
+</script>
+{% endblock %}

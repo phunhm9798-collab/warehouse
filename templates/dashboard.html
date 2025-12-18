@@ -1,0 +1,297 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+    <!-- KPI Cards -->
+    <div class="kpi-grid">
+        <div class="kpi-card">
+            <div class="kpi-icon blue">
+                <i data-lucide="package"></i>
+            </div>
+            <div class="kpi-content">
+                <span class="kpi-value" id="totalProducts">-</span>
+                <span class="kpi-label">Total Products</span>
+            </div>
+        </div>
+        
+        <div class="kpi-card">
+            <div class="kpi-icon green">
+                <i data-lucide="boxes"></i>
+            </div>
+            <div class="kpi-content">
+                <span class="kpi-value" id="totalQuantity">-</span>
+                <span class="kpi-label">Total Items in Stock</span>
+            </div>
+        </div>
+        
+        <div class="kpi-card">
+            <div class="kpi-icon purple">
+                <i data-lucide="dollar-sign"></i>
+            </div>
+            <div class="kpi-content">
+                <span class="kpi-value" id="totalValue">-</span>
+                <span class="kpi-label">Inventory Value</span>
+            </div>
+        </div>
+        
+        <div class="kpi-card warning">
+            <div class="kpi-icon orange">
+                <i data-lucide="alert-triangle"></i>
+            </div>
+            <div class="kpi-content">
+                <span class="kpi-value" id="lowStockCount">-</span>
+                <span class="kpi-label">Low Stock Alerts</span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Quick Actions -->
+    <div class="section">
+        <h2 class="section-title">Quick Actions</h2>
+        <div class="quick-actions">
+            <a href="/inventory" class="action-card">
+                <i data-lucide="plus-circle"></i>
+                <span>Add Product</span>
+            </a>
+            <a href="/receiving" class="action-card">
+                <i data-lucide="package-plus"></i>
+                <span>Receive Goods</span>
+            </a>
+            <a href="/shipping" class="action-card">
+                <i data-lucide="send"></i>
+                <span>Create Shipment</span>
+            </a>
+            <a href="/inventory" class="action-card">
+                <i data-lucide="clipboard-list"></i>
+                <span>Stock Count</span>
+            </a>
+            <a href="/reports" class="action-card">
+                <i data-lucide="file-text"></i>
+                <span>View Reports</span>
+            </a>
+        </div>
+    </div>
+    
+    <!-- Two Column Layout -->
+    <div class="dashboard-grid">
+        <!-- Low Stock Alerts -->
+        <div class="section">
+            <div class="section-header">
+                <h2 class="section-title">
+                    <i data-lucide="alert-circle" class="text-warning"></i>
+                    Low Stock Alerts
+                </h2>
+                <a href="/inventory?status=low_stock" class="btn btn-ghost">View All</a>
+            </div>
+            <div class="card">
+                <div class="low-stock-list" id="lowStockList">
+                    <div class="loading-spinner">
+                        <i data-lucide="loader-2" class="spin"></i>
+                        <span>Loading...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Recent Activity -->
+        <div class="section">
+            <div class="section-header">
+                <h2 class="section-title">
+                    <i data-lucide="clock"></i>
+                    Recent Activity
+                </h2>
+                <a href="/reports" class="btn btn-ghost">View All</a>
+            </div>
+            <div class="card">
+                <div class="activity-list" id="activityList">
+                    <div class="loading-spinner">
+                        <i data-lucide="loader-2" class="spin"></i>
+                        <span>Loading...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Order Summary -->
+    <div class="section">
+        <h2 class="section-title">Order Summary</h2>
+        <div class="order-summary-grid">
+            <div class="card order-summary-card">
+                <div class="order-summary-header">
+                    <i data-lucide="package-plus" class="text-blue"></i>
+                    <h3>Purchase Orders</h3>
+                </div>
+                <div class="order-stats" id="purchaseOrderStats">
+                    <div class="order-stat">
+                        <span class="stat-value" id="poPending">-</span>
+                        <span class="stat-label">Pending</span>
+                    </div>
+                    <div class="order-stat">
+                        <span class="stat-value" id="poReceived">-</span>
+                        <span class="stat-label">Received</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card order-summary-card">
+                <div class="order-summary-header">
+                    <i data-lucide="truck" class="text-green"></i>
+                    <h3>Shipment Orders</h3>
+                </div>
+                <div class="order-stats" id="shipmentOrderStats">
+                    <div class="order-stat">
+                        <span class="stat-value" id="soPicking">-</span>
+                        <span class="stat-label">Picking</span>
+                    </div>
+                    <div class="order-stat">
+                        <span class="stat-value" id="soShipped">-</span>
+                        <span class="stat-label">Shipped</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card order-summary-card">
+                <div class="order-summary-header">
+                    <i data-lucide="map-pin" class="text-purple"></i>
+                    <h3>Locations</h3>
+                </div>
+                <div class="order-stats">
+                    <div class="order-stat">
+                        <span class="stat-value" id="totalLocations">-</span>
+                        <span class="stat-label">Total</span>
+                    </div>
+                    <div class="order-stat">
+                        <span class="stat-value" id="totalCategories">-</span>
+                        <span class="stat-label">Categories</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    loadDashboardStats();
+    loadLowStockAlerts();
+    loadRecentActivity();
+});
+
+async function loadDashboardStats() {
+    try {
+        const response = await fetch('/api/dashboard/stats');
+        const data = await response.json();
+        
+        document.getElementById('totalProducts').textContent = data.total_products.toLocaleString();
+        document.getElementById('totalQuantity').textContent = data.total_quantity.toLocaleString();
+        document.getElementById('totalValue').textContent = '$' + data.total_value.toLocaleString(undefined, {minimumFractionDigits: 2});
+        document.getElementById('lowStockCount').textContent = data.low_stock_count;
+        document.getElementById('totalLocations').textContent = data.total_locations;
+        document.getElementById('totalCategories').textContent = data.total_categories;
+        
+        // Update notification badge
+        document.getElementById('notificationBadge').textContent = data.low_stock_count;
+        if (data.low_stock_count > 0) {
+            document.getElementById('notificationBadge').classList.add('show');
+        }
+        
+        // Order stats would come from order summary endpoint
+        document.getElementById('poPending').textContent = data.pending_purchase_orders || 0;
+        document.getElementById('soPicking').textContent = data.pending_shipment_orders || 0;
+        document.getElementById('poReceived').textContent = '-';
+        document.getElementById('soShipped').textContent = '-';
+        
+        lucide.createIcons();
+    } catch (error) {
+        console.error('Error loading stats:', error);
+    }
+}
+
+async function loadLowStockAlerts() {
+    try {
+        const response = await fetch('/api/dashboard/low-stock');
+        const products = await response.json();
+        
+        const container = document.getElementById('lowStockList');
+        
+        if (products.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <i data-lucide="check-circle" class="text-success"></i>
+                    <p>All stock levels are healthy!</p>
+                </div>
+            `;
+        } else {
+            container.innerHTML = products.map(p => `
+                <div class="low-stock-item">
+                    <div class="item-info">
+                        <span class="item-name">${p.name}</span>
+                        <span class="item-sku">${p.sku}</span>
+                    </div>
+                    <div class="item-stock">
+                        <span class="stock-qty ${p.quantity === 0 ? 'critical' : 'warning'}">${p.quantity}</span>
+                        <span class="stock-min">/ ${p.min_stock} min</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        lucide.createIcons();
+    } catch (error) {
+        console.error('Error loading low stock:', error);
+    }
+}
+
+async function loadRecentActivity() {
+    try {
+        const response = await fetch('/api/dashboard/recent-activity');
+        const transactions = await response.json();
+        
+        const container = document.getElementById('activityList');
+        
+        if (transactions.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <i data-lucide="inbox"></i>
+                    <p>No recent activity</p>
+                </div>
+            `;
+        } else {
+            container.innerHTML = transactions.map(t => {
+                const icon = t.transaction_type === 'IN' ? 'arrow-down-circle' : 
+                             t.transaction_type === 'OUT' ? 'arrow-up-circle' : 'refresh-cw';
+                const typeClass = t.transaction_type === 'IN' ? 'in' : 
+                                  t.transaction_type === 'OUT' ? 'out' : 'adjust';
+                const date = new Date(t.created_at).toLocaleDateString();
+                
+                return `
+                    <div class="activity-item">
+                        <div class="activity-icon ${typeClass}">
+                            <i data-lucide="${icon}"></i>
+                        </div>
+                        <div class="activity-info">
+                            <span class="activity-text">
+                                <strong>${t.product_name || 'Unknown'}</strong> - 
+                                ${t.transaction_type === 'IN' ? 'Received' : t.transaction_type === 'OUT' ? 'Shipped' : 'Adjusted'} 
+                                ${Math.abs(t.quantity)} units
+                            </span>
+                            <span class="activity-time">${date}</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        lucide.createIcons();
+    } catch (error) {
+        console.error('Error loading activity:', error);
+    }
+}
+</script>
+{% endblock %}

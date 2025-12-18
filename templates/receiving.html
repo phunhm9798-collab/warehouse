@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}Receiving{% endblock %}
+{% block page_title %}Receiving{% endblock %}
+
+{% block content %}
+<div class="receiving-page">
+    <div class="toolbar">
+        <div class="toolbar-left">
+            <select id="statusFilter" class="select-input">
+                <option value="">All Status</option>
+                <option value="draft">Draft</option>
+                <option value="pending">Pending</option>
+                <option value="partial">Partial</option>
+                <option value="received">Received</option>
+            </select>
+        </div>
+        <div class="toolbar-right">
+            <button class="btn btn-primary" id="newOrderBtn"><i data-lucide="plus"></i><span>New Purchase
+                    Order</span></button>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>PO Number</th>
+                        <th>Supplier</th>
+                        <th>Items</th>
+                        <th>Expected</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="ordersTableBody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<template id="orderFormTemplate">
+    <form id="orderForm" class="modal-form">
+        <input type="hidden" id="orderId">
+        <div class="form-group"><label>Supplier</label><input type="text" id="orderSupplier"></div>
+        <div class="form-group"><label>Expected Date</label><input type="date" id="orderExpectedDate"></div>
+        <div class="form-group"><label>Notes</label><textarea id="orderNotes" rows="2"></textarea></div>
+        <h4>Order Items</h4>
+        <div id="orderItems" class="order-items-list"></div>
+        <button type="button" class="btn btn-ghost" onclick="addOrderItem()"><i data-lucide="plus"></i> Add
+            Item</button>
+        <div class="form-actions">
+            <button type="button" class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save Order</button>
+        </div>
+    </form>
+</template>
+
+<template id="receiveFormTemplate">
+    <form id="receiveForm" class="modal-form">
+        <input type="hidden" id="receiveOrderId">
+        <div id="receiveItems" class="receive-items-list"></div>
+        <div class="form-actions">
+            <button type="button" class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+            <button type="submit" class="btn btn-primary">Receive Goods</button>
+        </div>
+    </form>
+</template>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let orders = [], products = [];
+    document.addEventListener('DOMContentLoaded', () => { loadOrders(); loadProducts(); document.getElementById('newOrderBtn').onclick = () => showOrderModal(); document.getElementById('statusFilter').onchange = loadOrders; });
+
+    async function loadProducts() { const res = await fetch('/inventory/api/products'); products = await res.json(); }
+    async function loadOrders() { const status = document.getElementById('statusFilter').value; const res = await fetch(`/receiving/api/orders${status ? '?status=' + status : ''}`); orders = await res.json(); renderOrders(); }
+
+    function renderOrders() {
+        document.getElementById('ordersTableBody').innerHTML = orders.length ? orders.map(o => `<tr><td><code>${o.po_number}</code></td><td>${o.supplier || '-'}</td><td>${o.total_received}/${o.total_items}</td><td>${o.expected_date || '-'}</td><td><span class="status-badge ${o.status}">${o.status}</span></td><td><div class="action-buttons">${o.status === 'draft' ? `<button class="btn-icon" onclick="submitOrder(${o.id})" title="Submit"><i data-lucide="send"></i></button>` : ''}${['pending', 'partial'].includes(o.status) ? `<button class="btn-icon" onclick="showReceiveModal(${o.id})" title="Receive"><i data-lucide="package-check"></i></button>` : ''}<button class="btn-icon" onclick="showOrderModal(${o.id})"><i data-lucide="edit"></i></button>${['draft', 'pending'].includes(o.status) ? `<button class="btn-icon danger" onclick="cancelOrder(${o.id})"><i data-lucide="x"></i></button>` : ''}</div></td></tr>`).join('') : '<tr><td colspan="6" class="empty-cell">No orders</td></tr>';
+        lucide.createIcons();
+    }
+
+    function showOrderModal(id = null) {
+        const content = document.getElementById('orderFormTemplate').content.cloneNode(true);
+        openModal(id ? 'Edit Order' : 'New Purchase Order', content);
+        if (id) { const o = orders.find(x => x.id === id); document.getElementById('orderId').value = o.id; document.getElementById('orderSupplier').value = o.supplier || ''; document.getElementById('orderExpectedDate').value = o.expected_date || ''; document.getElementById('orderNotes').value = o.notes || ''; o.items.forEach(i => addOrderItem(i)); } else { addOrderItem(); }
+        document.getElementById('orderForm').onsubmit = saveOrder;
+        lucide.createIcons();
+    }
+
+    function addOrderItem(item = null) {
+        const container = document.getElementById('orderItems');
+        const div = document.createElement('div');
+        div.className = 'order-item-row';
+        div.innerHTML = `<select class="item-product">${products.map(p => `<option value="${p.id}" ${item && item.product_id === p.id ? 'selected' : ''}>${p.sku} - ${p.name}</option>`).join('')}</select><input type="number" class="item-qty" value="${item ? item.quantity : 1}" min="1"><input type="number" class="item-price" value="${item ? item.unit_price : 0}" step="0.01" min="0"><button type="button" class="btn-icon danger" onclick="this.parentElement.remove()"><i data-lucide="trash-2"></i></button>`;
+        container.appendChild(div);
+        lucide.createIcons();
+    }
+
+    async function saveOrder(e) {
+        e.preventDefault();
+        const id = document.getElementById('orderId').value;
+        const items = [...document.querySelectorAll('.order-item-row')].map(row => ({ product_id: parseInt(row.querySelector('.item-product').value), quantity: parseInt(row.querySelector('.item-qty').value), unit_price: parseFloat(row.querySelector('.item-price').value) }));
+        const data = { supplier: document.getElementById('orderSupplier').value, expected_date: document.getElementById('orderExpectedDate').value || null, notes: document.getElementById('orderNotes').value, items };
+        await fetch(id ? `/receiving/api/orders/${id}` : '/receiving/api/orders', { method: id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+        closeModal(); loadOrders(); showToast('Order saved', 'success');
+    }
+
+    async function submitOrder(id) { await fetch(`/receiving/api/orders/${id}/submit`, { method: 'POST' }); loadOrders(); showToast('Order submitted', 'success'); }
+    async function cancelOrder(id) { if (!confirm('Cancel order?')) return; await fetch(`/receiving/api/orders/${id}/cancel`, { method: 'POST' }); loadOrders(); showToast('Order cancelled', 'success'); }
+
+    function showReceiveModal(id) {
+        const o = orders.find(x => x.id === id);
+        const content = document.getElementById('receiveFormTemplate').content.cloneNode(true);
+        openModal('Receive Goods - ' + o.po_number, content);
+        document.getElementById('receiveOrderId').value = id;
+        document.getElementById('receiveItems').innerHTML = o.items.filter(i => i.received_quantity < i.quantity).map(i => `<div class="receive-item"><span>${i.product_name} (${i.received_quantity}/${i.quantity})</span><input type="hidden" class="recv-item-id" value="${i.id}"><input type="number" class="recv-qty" value="${i.quantity - i.received_quantity}" min="0" max="${i.quantity - i.received_quantity}"></div>`).join('');
+        document.getElementById('receiveForm').onsubmit = receiveGoods;
+    }
+
+    async function receiveGoods(e) {
+        e.preventDefault();
+        const id = document.getElementById('receiveOrderId').value;
+        const items = [...document.querySelectorAll('.receive-item')].map(row => ({ item_id: parseInt(row.querySelector('.recv-item-id').value), quantity: parseInt(row.querySelector('.recv-qty').value) }));
+        await fetch(`/receiving/api/orders/${id}/receive`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items }) });
+        closeModal(); loadOrders(); showToast('Goods received', 'success');
+    }
+</script>
+{% endblock %}
