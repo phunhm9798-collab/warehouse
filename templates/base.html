@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,6 +12,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     {% block extra_css %}{% endblock %}
 </head>
+
 <body>
     <div class="app-container">
         <!-- Sidebar -->
@@ -24,7 +26,7 @@
                     <i data-lucide="menu"></i>
                 </button>
             </div>
-            
+
             <nav class="sidebar-nav">
                 <ul class="nav-list">
                     <li class="nav-item">
@@ -63,9 +65,15 @@
                             <span>Reports</span>
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a href="/forecast" class="nav-link {% if '/forecast' in request.path %}active{% endif %}">
+                            <i data-lucide="trending-up"></i>
+                            <span>Forecast</span>
+                        </a>
+                    </li>
                 </ul>
             </nav>
-            
+
             <div class="sidebar-footer">
                 <div class="user-info">
                     <div class="user-avatar">
@@ -78,7 +86,7 @@
                 </div>
             </div>
         </aside>
-        
+
         <!-- Main Content -->
         <main class="main-content">
             <header class="main-header">
@@ -99,16 +107,16 @@
                     </button>
                 </div>
             </header>
-            
+
             <div class="content-wrapper">
                 {% block content %}{% endblock %}
             </div>
         </main>
     </div>
-    
+
     <!-- Toast Container -->
     <div class="toast-container" id="toastContainer"></div>
-    
+
     <!-- Modal Container -->
     <div class="modal-overlay" id="modalOverlay">
         <div class="modal" id="modal">
@@ -123,7 +131,7 @@
             </div>
         </div>
     </div>
-    
+
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
     <script>
         // Initialize Lucide icons
@@ -131,4 +139,5 @@
     </script>
     {% block extra_js %}{% endblock %}
 </body>
+
 </html>

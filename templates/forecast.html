@@ -1,0 +1,758 @@
+{% extends "base.html" %}
+{% block title %}Demand Forecast{% endblock %}
+{% block page_title %}Demand Forecast & Stocking Predictions{% endblock %}
+
+{% block content %}
+<div class="forecast-page">
+    <!-- Configuration Panel -->
+    <div class="section">
+        <div class="section-header">
+            <h2 class="section-title">Forecast Configuration</h2>
+        </div>
+        <div class="config-panel">
+            <div class="config-group">
+                <label for="historyDays">Historical Data</label>
+                <select id="historyDays" onchange="refreshForecast()">
+                    <option value="30">Last 30 days</option>
+                    <option value="60">Last 60 days</option>
+                    <option value="90" selected>Last 90 days</option>
+                    <option value="180">Last 180 days</option>
+                </select>
+            </div>
+            <div class="config-group">
+                <label for="forecastDays">Forecast Period</label>
+                <select id="forecastDays" onchange="refreshForecast()">
+                    <option value="7">Next 7 days</option>
+                    <option value="14">Next 14 days</option>
+                    <option value="30" selected>Next 30 days</option>
+                    <option value="60">Next 60 days</option>
+                    <option value="90">Next 90 days</option>
+                </select>
+            </div>
+            <div class="config-group">
+                <label for="algorithm">Algorithm</label>
+                <select id="algorithm" onchange="refreshForecast()">
+                    <option value="exponential" selected>Exponential Smoothing</option>
+                    <option value="sma">Simple Moving Average</option>
+                    <option value="wma">Weighted Moving Average</option>
+                    <option value="linear">Linear Regression</option>
+                    <option value="holt">Holt-Winters</option>
+                </select>
+            </div>
+            <div class="config-group">
+                <button class="btn btn-primary" onclick="refreshForecast()">
+                    <i data-lucide="refresh-cw"></i> Refresh
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="forecast-summary" id="summaryCards">
+        <div class="summary-card">
+            <div class="summary-icon"><i data-lucide="package"></i></div>
+            <div class="summary-content">
+                <span class="summary-value" id="totalProducts">-</span>
+                <span class="summary-label">Products Analyzed</span>
+            </div>
+        </div>
+        <div class="summary-card warning">
+            <div class="summary-icon"><i data-lucide="alert-triangle"></i></div>
+            <div class="summary-content">
+                <span class="summary-value" id="needsRestock">-</span>
+                <span class="summary-label">Need Restock</span>
+            </div>
+        </div>
+        <div class="summary-card danger">
+            <div class="summary-icon"><i data-lucide="alert-circle"></i></div>
+            <div class="summary-content">
+                <span class="summary-value" id="criticalItems">-</span>
+                <span class="summary-label">Critical (≤7 days)</span>
+            </div>
+        </div>
+        <div class="summary-card info">
+            <div class="summary-icon"><i data-lucide="clock"></i></div>
+            <div class="summary-content">
+                <span class="summary-value" id="warningItems">-</span>
+                <span class="summary-label">Warning (≤14 days)</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Export Actions -->
+    <div class="export-actions">
+        <button class="btn btn-secondary" onclick="exportCSV()">
+            <i data-lucide="file-text"></i> Export CSV
+        </button>
+        <button class="btn btn-secondary" onclick="exportPDF()">
+            <i data-lucide="file"></i> Export PDF Report
+        </button>
+    </div>
+
+    <!-- Critical Items Alert -->
+    <div class="section" id="criticalSection" style="display: none;">
+        <div class="section-header">
+            <h2 class="section-title critical-title">
+                <i data-lucide="alert-circle"></i> Critical Items - Immediate Action Required
+            </h2>
+        </div>
+        <div class="card">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>SKU</th>
+                        <th>Product</th>
+                        <th>Current Stock</th>
+                        <th>Daily Demand</th>
+                        <th>Days Until Stockout</th>
+                        <th>Restock Qty</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="criticalTableBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Category Forecast -->
+    <div class="section">
+        <div class="section-header">
+            <h2 class="section-title">Category Forecast Summary</h2>
+        </div>
+        <div class="card">
+            <div class="category-chart" id="categoryChart"></div>
+        </div>
+    </div>
+
+    <!-- All Products Forecast Table -->
+    <div class="section">
+        <div class="section-header">
+            <h2 class="section-title">Product Forecast Details</h2>
+            <div class="search-box">
+                <i data-lucide="search"></i>
+                <input type="text" id="searchInput" placeholder="Search products..." onkeyup="filterTable()">
+            </div>
+        </div>
+        <div class="card">
+            <table class="data-table" id="forecastTable">
+                <thead>
+                    <tr>
+                        <th onclick="sortTable(0)">SKU <i data-lucide="chevrons-up-down"></i></th>
+                        <th onclick="sortTable(1)">Product <i data-lucide="chevrons-up-down"></i></th>
+                        <th onclick="sortTable(2)">Category</th>
+                        <th onclick="sortTable(3)">Current Stock <i data-lucide="chevrons-up-down"></i></th>
+                        <th onclick="sortTable(4)">Avg Daily Demand <i data-lucide="chevrons-up-down"></i></th>
+                        <th onclick="sortTable(5)">Daily Forecast <i data-lucide="chevrons-up-down"></i></th>
+                        <th onclick="sortTable(6)">Days Left <i data-lucide="chevrons-up-down"></i></th>
+                        <th onclick="sortTable(7)">Restock Needed <i data-lucide="chevrons-up-down"></i></th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="forecastTableBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Product Detail Modal -->
+    <div class="modal" id="productModal">
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h3 id="modalProductName">Product Forecast Details</h3>
+                <button class="modal-close" onclick="closeModal()">×</button>
+            </div>
+            <div class="modal-body" id="modalBody"></div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .forecast-page {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+    }
+
+    .config-panel {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+        background: var(--bg-secondary);
+        padding: 1rem;
+        border-radius: 8px;
+    }
+
+    .config-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .config-group label {
+        font-size: 0.85rem;
+        color: var(--text-muted);
+        font-weight: 500;
+    }
+
+    .config-group select {
+        padding: 0.5rem 1rem;
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        background: var(--bg-primary);
+        color: var(--text-primary);
+        min-width: 180px;
+    }
+
+    .forecast-summary {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 1rem;
+    }
+
+    .summary-card {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 1.25rem;
+        background: var(--bg-secondary);
+        border-radius: 10px;
+        border: 1px solid var(--border-color);
+    }
+
+    .summary-card.warning {
+        border-left: 4px solid #f59e0b;
+    }
+
+    .summary-card.danger {
+        border-left: 4px solid #ef4444;
+    }
+
+    .summary-card.info {
+        border-left: 4px solid #3b82f6;
+    }
+
+    .summary-icon {
+        width: 48px;
+        height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--accent-color);
+        border-radius: 10px;
+        color: white;
+    }
+
+    .summary-card.warning .summary-icon {
+        background: #f59e0b;
+    }
+
+    .summary-card.danger .summary-icon {
+        background: #ef4444;
+    }
+
+    .summary-card.info .summary-icon {
+        background: #3b82f6;
+    }
+
+    .summary-content {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .summary-value {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+
+    .summary-label {
+        font-size: 0.85rem;
+        color: var(--text-muted);
+    }
+
+    .export-actions {
+        display: flex;
+        gap: 0.75rem;
+    }
+
+    .critical-title {
+        color: #ef4444;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .category-chart {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        padding: 1rem;
+    }
+
+    .category-bar {
+        display: grid;
+        grid-template-columns: 150px 1fr 120px;
+        gap: 1rem;
+        align-items: center;
+    }
+
+    .category-name {
+        font-weight: 500;
+        color: var(--text-primary);
+    }
+
+    .bar-container {
+        height: 24px;
+        background: var(--bg-tertiary);
+        border-radius: 12px;
+        overflow: hidden;
+    }
+
+    .bar-fill {
+        height: 100%;
+        border-radius: 12px;
+        transition: width 0.5s ease;
+    }
+
+    .bar-value {
+        text-align: right;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    .search-box {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        background: var(--bg-secondary);
+        padding: 0.5rem 1rem;
+        border-radius: 6px;
+        border: 1px solid var(--border-color);
+    }
+
+    .search-box input {
+        border: none;
+        background: transparent;
+        color: var(--text-primary);
+        outline: none;
+        width: 200px;
+    }
+
+    .data-table th {
+        cursor: pointer;
+        user-select: none;
+    }
+
+    .data-table th:hover {
+        background: var(--bg-tertiary);
+    }
+
+    .days-critical {
+        color: #ef4444;
+        font-weight: 700;
+    }
+
+    .days-warning {
+        color: #f59e0b;
+        font-weight: 600;
+    }
+
+    .days-ok {
+        color: #10b981;
+    }
+
+    .restock-badge {
+        background: #fef2f2;
+        color: #dc2626;
+        padding: 0.25rem 0.75rem;
+        border-radius: 20px;
+        font-weight: 500;
+    }
+
+    .status-badge {
+        padding: 0.25rem 0.75rem;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        font-weight: 500;
+    }
+
+    .status-badge.out_of_stock {
+        background: #fef2f2;
+        color: #dc2626;
+    }
+
+    .status-badge.low_stock {
+        background: #fffbeb;
+        color: #d97706;
+    }
+
+    .status-badge.normal {
+        background: #ecfdf5;
+        color: #059669;
+    }
+
+    .status-badge.overstock {
+        background: #eff6ff;
+        color: #2563eb;
+    }
+
+    .btn-view {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.8rem;
+        background: var(--accent-color);
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+
+    .btn-view:hover {
+        opacity: 0.9;
+    }
+
+    .modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 1000;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .modal.active {
+        display: flex;
+    }
+
+    .modal-content {
+        background: var(--bg-primary);
+        border-radius: 12px;
+        width: 90%;
+        max-width: 600px;
+        max-height: 80vh;
+        overflow: auto;
+    }
+
+    .modal-content.modal-lg {
+        max-width: 900px;
+    }
+
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1rem 1.5rem;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .modal-close {
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        cursor: pointer;
+        color: var(--text-muted);
+    }
+
+    .modal-body {
+        padding: 1.5rem;
+    }
+
+    .product-detail-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .detail-card {
+        background: var(--bg-secondary);
+        padding: 1rem;
+        border-radius: 8px;
+    }
+
+    .detail-label {
+        font-size: 0.8rem;
+        color: var(--text-muted);
+        margin-bottom: 0.25rem;
+    }
+
+    .detail-value {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    .algorithm-comparison {
+        margin-top: 1.5rem;
+    }
+
+    .algorithm-comparison h4 {
+        margin-bottom: 0.75rem;
+        color: var(--text-primary);
+    }
+
+    .algorithm-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .algorithm-table th,
+    .algorithm-table td {
+        padding: 0.75rem;
+        text-align: left;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .loading-spinner {
+        display: flex;
+        justify-content: center;
+        padding: 3rem;
+    }
+
+    .spin {
+        animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+        from {
+            transform: rotate(0deg);
+        }
+
+        to {
+            transform: rotate(360deg);
+        }
+    }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let forecastData = [];
+    let reportData = null;
+
+    async function refreshForecast() {
+        const historyDays = document.getElementById('historyDays').value;
+        const forecastDays = document.getElementById('forecastDays').value;
+        const algorithm = document.getElementById('algorithm').value;
+
+        // Show loading
+        document.getElementById('forecastTableBody').innerHTML = '<tr><td colspan="9" class="text-center"><div class="loading-spinner"><i data-lucide="loader-2" class="spin"></i></div></td></tr>';
+        lucide.createIcons();
+
+        try {
+            // Fetch full report
+            const res = await fetch(`/forecast/api/report?history_days=${historyDays}&forecast_days=${forecastDays}&algorithm=${algorithm}`);
+            reportData = await res.json();
+
+            forecastData = reportData.all_products;
+
+            // Update summary cards
+            document.getElementById('totalProducts').textContent = reportData.summary.total_products;
+            document.getElementById('needsRestock').textContent = reportData.summary.products_needing_restock;
+            document.getElementById('criticalItems').textContent = reportData.summary.critical_stockout_items;
+            document.getElementById('warningItems').textContent = reportData.summary.warning_items;
+
+            // Critical items section
+            if (reportData.critical_items.length > 0) {
+                document.getElementById('criticalSection').style.display = 'block';
+                renderCriticalTable(reportData.critical_items);
+            } else {
+                document.getElementById('criticalSection').style.display = 'none';
+            }
+
+            // Category chart
+            renderCategoryChart(reportData.by_category);
+
+            // Products table
+            renderForecastTable(forecastData);
+
+            lucide.createIcons();
+        } catch (error) {
+            console.error('Error fetching forecast:', error);
+            document.getElementById('forecastTableBody').innerHTML = '<tr><td colspan="9" class="text-center text-danger">Error loading forecast data</td></tr>';
+        }
+    }
+
+    function renderCriticalTable(items) {
+        const tbody = document.getElementById('criticalTableBody');
+        tbody.innerHTML = items.map(item => `
+        <tr>
+            <td><code>${item.product_sku}</code></td>
+            <td>${item.product_name}</td>
+            <td class="text-danger">${item.current_stock}</td>
+            <td>${item.avg_daily_demand}</td>
+            <td class="days-critical">${item.days_until_stockout} days</td>
+            <td><span class="restock-badge">${item.restock_needed} units</span></td>
+            <td><button class="btn-view" onclick="showProductDetail(${item.product_id})">View Details</button></td>
+        </tr>
+    `).join('');
+    }
+
+    function renderCategoryChart(categories) {
+        const container = document.getElementById('categoryChart');
+        const maxForecast = Math.max(...categories.map(c => c.total_forecast), 1);
+
+        container.innerHTML = categories.map(cat => `
+        <div class="category-bar">
+            <div class="category-name">${cat.category_name}</div>
+            <div class="bar-container">
+                <div class="bar-fill" style="width: ${(cat.total_forecast / maxForecast * 100).toFixed(1)}%; background: ${cat.color}"></div>
+            </div>
+            <div class="bar-value">${cat.total_forecast.toFixed(0)} units</div>
+        </div>
+    `).join('');
+    }
+
+    function renderForecastTable(items) {
+        const tbody = document.getElementById('forecastTableBody');
+        tbody.innerHTML = items.map(item => {
+            const daysClass = item.days_until_stockout <= 7 ? 'days-critical' :
+                item.days_until_stockout <= 14 ? 'days-warning' : 'days-ok';
+            return `
+            <tr onclick="showProductDetail(${item.product_id})" style="cursor: pointer;">
+                <td><code>${item.product_sku}</code></td>
+                <td>${item.product_name}</td>
+                <td>${item.category}</td>
+                <td>${item.current_stock}</td>
+                <td>${item.avg_daily_demand}</td>
+                <td>${item.daily_forecast}</td>
+                <td class="${daysClass}">${item.days_until_stockout === 999 ? '∞' : item.days_until_stockout}</td>
+                <td>${item.restock_needed > 0 ? `<span class="restock-badge">${item.restock_needed}</span>` : '-'}</td>
+                <td><span class="status-badge ${item.stock_status}">${item.stock_status.replace('_', ' ')}</span></td>
+            </tr>
+        `;
+        }).join('');
+    }
+
+    async function showProductDetail(productId) {
+        const historyDays = document.getElementById('historyDays').value;
+        const forecastDays = document.getElementById('forecastDays').value;
+        const algorithm = document.getElementById('algorithm').value;
+
+        try {
+            const res = await fetch(`/forecast/api/products/${productId}?history_days=${historyDays}&forecast_days=${forecastDays}&algorithm=${algorithm}`);
+            const data = await res.json();
+
+            document.getElementById('modalProductName').textContent = `${data.product_name} (${data.product_sku})`;
+
+            document.getElementById('modalBody').innerHTML = `
+            <div class="product-detail-grid">
+                <div class="detail-card">
+                    <div class="detail-label">Current Stock</div>
+                    <div class="detail-value">${data.current_stock} units</div>
+                </div>
+                <div class="detail-card">
+                    <div class="detail-label">Daily Forecast</div>
+                    <div class="detail-value">${data.daily_forecast} units</div>
+                </div>
+                <div class="detail-card">
+                    <div class="detail-label">Total Forecast (${data.forecast_days}d)</div>
+                    <div class="detail-value">${data.total_forecast} units</div>
+                </div>
+                <div class="detail-card">
+                    <div class="detail-label">Days Until Stockout</div>
+                    <div class="detail-value ${data.days_until_stockout <= 7 ? 'days-critical' : ''}">${data.days_until_stockout === 999 ? '∞' : data.days_until_stockout} days</div>
+                </div>
+                <div class="detail-card">
+                    <div class="detail-label">Safety Stock</div>
+                    <div class="detail-value">${data.safety_stock} units</div>
+                </div>
+                <div class="detail-card">
+                    <div class="detail-label">Restock Needed</div>
+                    <div class="detail-value">${data.restock_needed > 0 ? data.restock_needed + ' units' : 'None'}</div>
+                </div>
+            </div>
+            
+            <div class="algorithm-comparison">
+                <h4>Algorithm Comparison (Daily Demand Prediction)</h4>
+                <table class="algorithm-table">
+                    <thead>
+                        <tr>
+                            <th>Algorithm</th>
+                            <th>Predicted Daily Demand</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>Simple Moving Average (7-day)</td><td>${data.algorithms.sma} units</td></tr>
+                        <tr><td>Weighted Moving Average (7-day)</td><td>${data.algorithms.wma} units</td></tr>
+                        <tr><td>Exponential Smoothing (α=0.3)</td><td>${data.algorithms.exponential} units</td></tr>
+                        <tr><td>Linear Regression (Average)</td><td>${data.algorithms.linear_avg} units</td></tr>
+                        <tr><td>Holt-Winters (Average)</td><td>${data.algorithms.holt_avg} units</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <div style="margin-top: 1.5rem;">
+                <h4>Historical Stats (${data.history_days} days)</h4>
+                <p>Total Historical Demand: <strong>${data.total_historical_demand}</strong> units</p>
+                <p>Average Daily Demand: <strong>${data.avg_daily_demand}</strong> units</p>
+                <p>Max Daily Demand: <strong>${data.max_daily_demand}</strong> units</p>
+            </div>
+            
+            <div style="margin-top: 1.5rem;">
+                <h4>Stocking Recommendations</h4>
+                <p>Min Stock Level: <strong>${data.min_stock}</strong> | Max Stock Level: <strong>${data.max_stock}</strong></p>
+                <p>Projected Stock (after ${data.forecast_days} days): <strong>${data.projected_stock}</strong> units</p>
+                <p>Optimal Restock Quantity: <strong>${data.optimal_restock}</strong> units</p>
+            </div>
+        `;
+
+            document.getElementById('productModal').classList.add('active');
+        } catch (error) {
+            console.error('Error fetching product detail:', error);
+        }
+    }
+
+    function closeModal() {
+        document.getElementById('productModal').classList.remove('active');
+    }
+
+    function filterTable() {
+        const search = document.getElementById('searchInput').value.toLowerCase();
+        const filtered = forecastData.filter(item =>
+            item.product_name.toLowerCase().includes(search) ||
+            item.product_sku.toLowerCase().includes(search) ||
+            item.category.toLowerCase().includes(search)
+        );
+        renderForecastTable(filtered);
+    }
+
+    function sortTable(columnIndex) {
+        const sorted = [...forecastData].sort((a, b) => {
+            const keys = ['product_sku', 'product_name', 'category', 'current_stock', 'avg_daily_demand', 'daily_forecast', 'days_until_stockout', 'restock_needed'];
+            const key = keys[columnIndex];
+            if (typeof a[key] === 'number') {
+                return b[key] - a[key];
+            }
+            return a[key].localeCompare(b[key]);
+        });
+        renderForecastTable(sorted);
+    }
+
+    function exportCSV() {
+        const historyDays = document.getElementById('historyDays').value;
+        const forecastDays = document.getElementById('forecastDays').value;
+        const algorithm = document.getElementById('algorithm').value;
+        window.location.href = `/forecast/api/export/csv?history_days=${historyDays}&forecast_days=${forecastDays}&algorithm=${algorithm}`;
+    }
+
+    function exportPDF() {
+        const historyDays = document.getElementById('historyDays').value;
+        const forecastDays = document.getElementById('forecastDays').value;
+        const algorithm = document.getElementById('algorithm').value;
+        window.location.href = `/forecast/api/export/pdf?history_days=${historyDays}&forecast_days=${forecastDays}&algorithm=${algorithm}`;
+    }
+
+    // Close modal on outside click
+    document.getElementById('productModal').addEventListener('click', function (e) {
+        if (e.target === this) {
+            closeModal();
+        }
+    });
+
+    // Load initial forecast
+    document.addEventListener('DOMContentLoaded', refreshForecast);
+</script>
+{% endblock %}

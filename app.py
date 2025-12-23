@@ -15,6 +15,7 @@ def create_app():
     from routes.receiving import receiving_bp
     from routes.shipping import shipping_bp
     from routes.reports import reports_bp
+    from routes.forecast import forecast_bp
     
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(inventory_bp)
@@ -22,6 +23,7 @@ def create_app():
     app.register_blueprint(receiving_bp)
     app.register_blueprint(shipping_bp)
     app.register_blueprint(reports_bp)
+    app.register_blueprint(forecast_bp)
     
     with app.app_context():
         db.create_all()
